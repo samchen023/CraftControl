@@ -19,7 +19,7 @@
 
 ## ℹ️ 關於
 
-CraftControl {APP_VERSION}  
+CraftControl 
 Minecraft Server 控制面板  
-MIT
+Made by Samchen023
 
