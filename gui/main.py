@@ -4,11 +4,16 @@ import os
 import requests
 import threading
 import webbrowser
+import subprocess  # 新增這行
 from controller import start_server, stop_server, is_server_running
 from config_manager import get_paper_count, set_paper_count
 
 APP_VERSION = "v1.0"
 IS_WINDOWS = os.name == "nt"
+
+# 將當前工作目錄切換到 CraftControl 根目錄
+os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 # === GUI 變數先宣告 ===
 status_var = None
@@ -39,12 +44,13 @@ def ask_paper_count():
 
 # === 根據 paper count 建立 SERVER_PATHS 字典 ===
 def build_server_paths(paper_count):
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     paths = {
-        "BungeeCord": "servers/bungee/start.bat" if IS_WINDOWS else "servers/bungee/start.sh"
+        "BungeeCord": os.path.join(base_dir, "servers", "bungee", "start.bat") if IS_WINDOWS else os.path.join(base_dir, "servers", "bungee", "start.sh")
     }
     for i in range(1, paper_count + 1):
         name = f"Paper {i}"
-        path = f"servers/paper{i}/start.bat" if IS_WINDOWS else f"servers/paper{i}/start.sh"
+        path = os.path.join(base_dir, "servers", f"paper{i}", "start.bat") if IS_WINDOWS else os.path.join(base_dir, "servers", f"paper{i}", "start.sh")
         paths[name] = path
     return paths
 
@@ -60,14 +66,23 @@ def check_server_files():
     log("開始檢查伺服器資料夾檔案...")
     for name, script_path in SERVER_PATHS.items():
         folder = os.path.dirname(script_path)
-        jar_path = os.path.join(folder, "paper.jar")
-        script_exists = os.path.exists(script_path)
-        jar_exists = os.path.exists(jar_path) if "paper" in name.lower() else True
-
-        if not jar_exists:
-            log(f"⚠️ {name} 缺少 paper.jar")
-        if not script_exists:
-            log(f"⚠️ {name} 缺少啟動腳本 ({script_path})")
+        # 判斷是 Paper 或 Bungee
+        if "paper" in name.lower():
+            jar_path = os.path.join(folder, "paper.jar")
+            jar_exists = os.path.exists(jar_path)
+            script_exists = os.path.exists(script_path)
+            if not jar_exists:
+                log(f"⚠️ {name} 缺少 paper.jar")
+            if not script_exists:
+                log(f"⚠️ {name} 缺少啟動腳本 ({script_path})")
+        elif "bungee" in name.lower():
+            jar_path = os.path.join(folder, "BungeeCord.jar")
+            jar_exists = os.path.exists(jar_path)
+            script_exists = os.path.exists(script_path)
+            if not jar_exists:
+                log(f"⚠️ {name} 缺少 BungeeCord.jar")
+            if not script_exists:
+                log(f"⚠️ {name} 缺少啟動腳本 ({script_path})")
 
 # === 自動修復缺失項目(帶 Loading 視窗，非阻塞) ===
 def auto_repair_missing():
@@ -86,8 +101,9 @@ def auto_repair_missing():
                 log("無法修復：尚未選擇 Paper 版本")
                 return
 
-            api = f"https://api.papermc.io/v2/projects/paper/versions/{version}"
-            builds = requests.get(api).json()["builds"]
+            # Paper API
+            paper_api = f"https://api.papermc.io/v2/projects/paper/versions/{version}"
+            builds = requests.get(paper_api).json()["builds"]
             latest = builds[-1]
 
             for name, script_path in SERVER_PATHS.items():
@@ -98,20 +114,35 @@ def auto_repair_missing():
                 if not os.path.exists(script_path):
                     if IS_WINDOWS:
                         with open(script_path, "w", encoding="utf-8") as f:
-                            f.write(f"""@echo off
+                            folder_abs = os.path.abspath(os.path.dirname(script_path))
+                            if "paper" in name.lower():
+                                f.write(f"""@echo off
+cd /d "{folder_abs}"
 java -Xmx2G -jar paper.jar nogui
+pause
+""")
+                            else:  # Bungee
+                                f.write(f"""@echo off
+cd /d "{folder_abs}"
+java -Xmx512M -jar BungeeCord.jar
 pause
 """)
                     else:
                         with open(script_path, "w", encoding="utf-8") as f:
-                            f.write(f"""#!/bin/bash
+                            if "paper" in name.lower():
+                                f.write(f"""#!/bin/bash
 java -Xmx2G -jar paper.jar nogui
+read -p "Press Enter to exit..."
+""")
+                            else:
+                                f.write(f"""#!/bin/bash
+java -Xmx512M -jar BungeeCord.jar
 read -p "Press Enter to exit..."
 """)
                         os.chmod(script_path, 0o755)
                     log(f"✅ 已補上啟動腳本：{name}")
 
-                # 補 paper.jar
+                # 補 jar 檔
                 if "paper" in name.lower():
                     jar_path = os.path.join(folder, "paper.jar")
                     if not os.path.exists(jar_path):
@@ -121,6 +152,15 @@ read -p "Press Enter to exit..."
                         with open(jar_path, "wb") as f:
                             f.write(r.content)
                         log(f"✅ 已補上 paper.jar：{name}")
+                elif "bungee" in name.lower():
+                    jar_path = os.path.join(folder, "BungeeCord.jar")
+                    if not os.path.exists(jar_path):
+                        url = "https://ci.md-5.net/job/BungeeCord/lastSuccessfulBuild/artifact/bootstrap/target/BungeeCord.jar"
+                        r = requests.get(url)
+                        r.raise_for_status()
+                        with open(jar_path, "wb") as f:
+                            f.write(r.content)
+                        log(f"✅ 已補上 BungeeCord.jar：{name}")
 
             log("✅ 所有伺服器資料夾修復完成")
         except Exception as e:
@@ -133,6 +173,7 @@ read -p "Press Enter to exit..."
 # === 控制伺服器 ===
 def on_start(server_name):
     success, msg = start_server(server_name, SERVER_PATHS[server_name])
+    print(SERVER_PATHS[server_name])
     log(msg)
     if not success:
         messagebox.showerror("錯誤", msg)
@@ -156,7 +197,7 @@ def update_server_statuses():
         running = is_server_running(name)
         lbl = status_labels.get(name)
         if lbl:
-            lbl.config(text="🟢 運行中" if running else "🔴 未啟動", fg="green" if running else "red")
+            lbl.config(text="🟢 運行中" if running else "🔴 未啟動", foreground="green" if running else "red")
     root.after(3000, update_server_statuses)
 
 # === 下載函式 ===
@@ -250,6 +291,61 @@ def change_paper_count():
 def show_about():
     messagebox.showinfo("關於 CraftControl", f"CraftControl {APP_VERSION}\nMinecraft Server 控制面板")
 
+def write_start_script(path, max_ram_gb=2):
+    max_ram = f"-Xmx{max_ram_gb}G"
+    IS_WINDOWS = os.name == "nt"
+    if IS_WINDOWS:
+        content = f"""@echo off
+java {max_ram} -jar paper.jar nogui
+pause
+"""
+    else:
+        content = f"""#!/bin/bash
+java {max_ram} -jar paper.jar nogui
+read -p "Press Enter to exit..."
+"""
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+    if not IS_WINDOWS:
+        os.chmod(path, 0o755)
+
+def set_server_ram(server_name):
+    script_path = SERVER_PATHS[server_name]
+    win = tk.Toplevel(root)
+    win.title(f"{server_name} 記憶體設定")
+    win.geometry("300x120")
+    tk.Label(win, text="請輸入最大記憶體 (GB)：").pack(pady=5)
+    ram_entry = tk.Entry(win)
+    ram_entry.pack(pady=5)
+    ram_entry.insert(0, "2")
+    def on_apply():
+        ram_str = ram_entry.get()
+        try:
+            ram_gb = int(ram_str)
+            if ram_gb < 1 or ram_gb > 64:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("錯誤", "請輸入 1~64 之間的整數")
+            return
+        write_start_script(script_path, ram_gb)
+        messagebox.showinfo("成功", f"已設定最大記憶體為 {ram_gb} GB，並更新啟動腳本")
+        win.destroy()
+    tk.Button(win, text="套用", command=on_apply).pack(pady=10)
+
+def open_server_folder(server_name):
+    folder = os.path.dirname(SERVER_PATHS[server_name])
+    abs_folder = os.path.abspath(folder)  # 取得絕對路徑
+    try:
+        os.makedirs(abs_folder, exist_ok=True)  # 確保資料夾存在
+        if IS_WINDOWS:
+            os.startfile(abs_folder)
+        else:
+            subprocess.Popen(["xdg-open", abs_folder])
+        log(f"已開啟 {server_name} 資料夾")
+    except Exception as e:
+        log(f"開啟資料夾失敗：{e}")
+        messagebox.showerror("錯誤", f"開啟資料夾失敗：{e}")
+
 # === 主程式開始 ===
 paper_count = ask_paper_count()
 SERVER_PATHS = build_server_paths(paper_count)
@@ -271,6 +367,13 @@ menubar = tk.Menu(root)
 server_menu = tk.Menu(menubar, tearoff=0)
 server_menu.add_command(label="啟動所有伺服器", command=start_all)
 server_menu.add_command(label="停止所有伺服器", command=stop_all)
+
+# 新增「開啟伺服器資料夾」子選單
+open_folder_menu = tk.Menu(server_menu, tearoff=0)
+for name in SERVER_PATHS:
+    open_folder_menu.add_command(label=name, command=lambda n=name: open_server_folder(n))
+server_menu.add_cascade(label="開啟伺服器資料夾", menu=open_folder_menu)
+
 menubar.add_cascade(label="伺服器", menu=server_menu)
 
 download_menu = tk.Menu(menubar, tearoff=0)
@@ -293,40 +396,43 @@ menubar.add_cascade(label="說明", menu=help_menu)
 root.config(menu=menubar)
 
 # === 主界面元件 ===
-tk.Label(root, text="伺服器控制", font=("Arial", 14, "bold")).pack(pady=10)
+ttk.Label(root, text="伺服器控制", font=("Arial", 14, "bold")).pack(pady=10)
 for name in SERVER_PATHS:
-    frame = tk.Frame(root)
+    frame = ttk.Frame(root)
     frame.pack(pady=2)
-    tk.Label(frame, text=name, width=15).pack(side=tk.LEFT)
-    tk.Button(frame, text="啟動", command=lambda n=name: on_start(n)).pack(side=tk.LEFT, padx=5)
-    tk.Button(frame, text="停止", command=lambda n=name: on_stop(n)).pack(side=tk.LEFT)
+    ttk.Label(frame, text=name, width=15).pack(side=tk.LEFT)
+    ttk.Button(frame, text="啟動", command=lambda n=name: on_start(n)).pack(side=tk.LEFT, padx=5)
+    ttk.Button(frame, text="停止", command=lambda n=name: on_stop(n)).pack(side=tk.LEFT)
+    # 新增記憶體設定按鈕（僅 Paper 伺服器）
+    if "paper" in name.lower():
+        ttk.Button(frame, text="記憶體設定", command=lambda n=name: set_server_ram(n)).pack(side=tk.LEFT, padx=5)
 
-status_frame = tk.Frame(root)
+status_frame = ttk.Frame(root)
 status_frame.pack(pady=10)
-tk.Label(status_frame, text="伺服器狀態", font=("Arial", 12, "bold")).grid(row=0, column=0, columnspan=2, pady=(0, 5))
+ttk.Label(status_frame, text="伺服器狀態", font=("Arial", 12, "bold")).grid(row=0, column=0, columnspan=2, pady=(0, 5))
 for i, name in enumerate(SERVER_PATHS):
-    tk.Label(status_frame, text=name + "：").grid(row=i + 1, column=0, sticky="e")
-    lbl = tk.Label(status_frame, text="未知", fg="gray")
+    ttk.Label(status_frame, text=name + "：").grid(row=i + 1, column=0, sticky="e")
+    lbl = ttk.Label(status_frame, text="未知", foreground="gray")
     lbl.grid(row=i + 1, column=1, sticky="w")
     status_labels[name] = lbl
 
-tk.Label(root, text="\n伺服器下載", font=("Arial", 14, "bold")).pack(pady=10)
-frame_dl = tk.Frame(root)
+ttk.Label(root, text="\n伺服器下載", font=("Arial", 14, "bold")).pack(pady=10)
+frame_dl = ttk.Frame(root)
 frame_dl.pack()
-tk.Label(frame_dl, text="Paper 版本：").pack(side=tk.LEFT)
+ttk.Label(frame_dl, text="Paper 版本：").pack(side=tk.LEFT)
 paper_version_combo = ttk.Combobox(frame_dl, textvariable=paper_version_var, state="readonly")
 paper_version_combo.pack(side=tk.LEFT)
 paper_version_combo['values'] = ["載入中..."]
 paper_version_combo.set("載入中...")
 
-tk.Button(root, text="下載最新 Paper", command=download_latest_paper).pack(pady=3)
-tk.Button(root, text="下載最新 BungeeCord", command=download_latest_bungee).pack(pady=3)
+ttk.Button(root, text="下載最新 Paper", command=download_latest_paper).pack(pady=3)
+ttk.Button(root, text="下載最新 BungeeCord", command=download_latest_bungee).pack(pady=3)
 
-tk.Label(root, text="\n日誌", font=("Arial", 14, "bold")).pack()
+ttk.Label(root, text="\n日誌", font=("Arial", 14, "bold")).pack()
 log_box = tk.Text(root, height=12, width=60)
 log_box.pack(pady=5)
 
-status_bar = tk.Label(root, textvariable=status_var, bd=1, relief=tk.SUNKEN, anchor="w")
+status_bar = ttk.Label(root, textvariable=status_var, relief=tk.SUNKEN, anchor="w")
 status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
 ensure_server_dirs()

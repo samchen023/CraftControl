@@ -13,7 +13,15 @@ def start_server(server_name, script_path):
     if not os.path.exists(script_path):
         return False, f"啟動腳本不存在：{script_path}"
     try:
-        proc = subprocess.Popen(script_path, shell=True)
+        script_dir = os.path.dirname(os.path.abspath(script_path))
+        if IS_WINDOWS and script_path.endswith('.bat'):
+            proc = subprocess.Popen(
+                ['cmd.exe', '/c', script_path],
+                cwd=script_dir,
+                creationflags=subprocess.CREATE_NEW_CONSOLE
+            )
+        else:
+            proc = subprocess.Popen(script_path, shell=True, cwd=script_dir)
         server_processes[server_name] = proc
         return True, f"已啟動伺服器：{server_name}"
     except Exception as e:
