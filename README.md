@@ -4,6 +4,11 @@
 作者：Samchen023
 
 ---
+## 下載
+
+[最新版本](https://github.com/samchen023/CraftControl/releases)
+
+---
 
 ## 簡介
 
