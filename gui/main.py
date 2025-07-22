@@ -13,9 +13,13 @@ from config_manager import get_paper_count, set_paper_count
 APP_VERSION = "v1.0"
 IS_WINDOWS = os.name == "nt"
 
-# 將當前工作目錄切換到 CraftControl 根目錄
-os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if getattr(sys, 'frozen', False):
+    base_dir = os.path.dirname(sys.executable)
+else:
+    base_dir = os.path.dirname(os.path.abspath(__file__))
 
+# 將當前工作目錄切換到 CraftControl 根目錄
+os.chdir(base_dir)
 
 # === GUI 變數先宣告 ===
 status_var = None

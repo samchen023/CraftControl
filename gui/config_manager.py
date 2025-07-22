@@ -2,12 +2,16 @@ import json
 import os
 import sys
 
-if getattr(sys, 'frozen', False):
-    base_dir = os.path.dirname(sys.executable)
-else:
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+# 建議儲存在使用者主目錄下的 .config 目錄
+def get_config_path():
+    if getattr(sys, 'frozen', False):
+        base_dir = os.path.expanduser("~/.config/mcmanager")
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    os.makedirs(base_dir, exist_ok=True)
+    return os.path.join(base_dir, "config.json")
 
-CONFIG_PATH = os.path.join(base_dir, "config.json")
+CONFIG_PATH = get_config_path()
 
 def load_config():
     if not os.path.exists(CONFIG_PATH):
