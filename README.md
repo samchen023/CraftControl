@@ -6,7 +6,7 @@
 ---
 ## 下載
 
-Windows:[最新版本](https://github.com/samchen023/CraftControl/releases)
+Windows_amd64: [最新版本](https://github.com/samchen023/CraftControl/releases)
 
 ---
 
