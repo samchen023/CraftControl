@@ -1,10 +1,12 @@
+import sys
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 import os
 import requests
 import threading
 import webbrowser
-import subprocess  # 新增這行
+import subprocess
+from gui import controller, config_manager
 from controller import start_server, stop_server, is_server_running
 from config_manager import get_paper_count, set_paper_count
 
@@ -44,7 +46,7 @@ def ask_paper_count():
 
 # === 根據 paper count 建立 SERVER_PATHS 字典 ===
 def build_server_paths(paper_count):
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    base_dir = os.path.dirname(sys.executable)
     paths = {
         "BungeeCord": os.path.join(base_dir, "servers", "bungee", "start.bat") if IS_WINDOWS else os.path.join(base_dir, "servers", "bungee", "start.sh")
     }
@@ -174,12 +176,51 @@ read -p "Press Enter to exit..."
 def on_start(server_name):
     success, msg = start_server(server_name, SERVER_PATHS[server_name])
     print(SERVER_PATHS[server_name])
-    log(msg)
+    # log(msg)  # 移除這行，不輸出到 log_box
+    # 新增自動開啟 eula.txt 檔案
+    folder = os.path.dirname(SERVER_PATHS[server_name])
+    eula_path = os.path.join(folder, "eula.txt")
+    need_open_eula = False
+    if os.path.exists(eula_path):
+        try:
+            with open(eula_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            # 只檢查 eula= 這一行
+            eula_value = None
+            for line in lines:
+                if line.strip().lower().startswith("eula="):
+                    eula_value = line.strip().lower()
+                    break
+            need_open_eula = (eula_value != "eula=true")
+        except Exception as e:
+            log(f"讀取 eula.txt 失敗：{e}")
+            need_open_eula = True
+    else:
+        need_open_eula = False
+
+    if need_open_eula:
+        try:
+            if IS_WINDOWS:
+                os.startfile(eula_path)
+            else:
+                subprocess.Popen(["xdg-open", eula_path])
+            log(f"已自動開啟 {server_name} 的 eula.txt，請同意後再啟動。")
+        except Exception as e:
+            log(f"開啟 eula.txt 失敗：{e}")
+            messagebox.showerror("錯誤", f"開啟 eula.txt 失敗：{e}")
     if not success:
         messagebox.showerror("錯誤", msg)
 
 def on_stop(server_name):
-    success, msg = stop_server(server_name)
+    # 根據伺服器類型決定關閉指令
+    if "paper" in server_name.lower():
+        stop_cmd = "stop"
+    elif "bungee" in server_name.lower():
+        stop_cmd = "end"
+    else:
+        stop_cmd = "stop"  # 預設
+
+    success, msg = stop_server(server_name, stop_cmd)
     log(msg)
     if not success:
         messagebox.showerror("錯誤", msg)
@@ -194,7 +235,7 @@ def stop_all():
 
 def update_server_statuses():
     for name in SERVER_PATHS:
-        running = is_server_running(name)
+        running = is_server_running(name,port=25565)
         lbl = status_labels.get(name)
         if lbl:
             lbl.config(text="🟢 運行中" if running else "🔴 未啟動", foreground="green" if running else "red")
@@ -289,7 +330,7 @@ def change_paper_count():
 
 # === 關於視窗 ===
 def show_about():
-    messagebox.showinfo("關於 CraftControl", f"CraftControl {APP_VERSION}\nMinecraft Server 控制面板")
+    messagebox.showinfo("關於 CraftControl", f"CraftControl {APP_VERSION}\nMade By Samchen023\nMinecraft Server 控制面板")
 
 def write_start_script(path, max_ram_gb=2):
     max_ram = f"-Xmx{max_ram_gb}G"
@@ -390,6 +431,7 @@ config_menu.add_command(label="一鍵修復缺失項目", command=auto_repair_mi
 menubar.add_cascade(label="設定", menu=config_menu)
 
 help_menu = tk.Menu(menubar, tearoff=0)
+help_menu.add_command(label="官網", command=lambda: webbrowser.open_new("https://github.com/samchen023/CraftControl"))
 help_menu.add_command(label="關於", command=show_about)
 menubar.add_cascade(label="說明", menu=help_menu)
 

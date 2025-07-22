@@ -1,7 +1,13 @@
 import json
 import os
+import sys
 
-CONFIG_PATH = "config.json"
+if getattr(sys, 'frozen', False):
+    base_dir = os.path.dirname(sys.executable)
+else:
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+
+CONFIG_PATH = os.path.join(base_dir, "config.json")
 
 def load_config():
     if not os.path.exists(CONFIG_PATH):
