@@ -27,7 +27,7 @@ CraftControl 是一款 Minecraft 伺服器管理工具，支援多個 Paper 伺�
 - 開啟伺服器資料夾的快捷功能
 - 伺服器運行狀態即時更新顯示
 - 日誌輸出，方便追蹤管理操作與錯誤
-- 支援 Windows 與 Linux 系統
+- 支援  Windows11  系統
 
 ---
 
