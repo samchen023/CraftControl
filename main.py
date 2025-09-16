@@ -6,9 +6,8 @@ import requests
 import threading
 import webbrowser
 import subprocess
-from gui import controller, config_manager
-from controller import start_server, stop_server, is_server_running
-from config_manager import get_paper_count, set_paper_count
+from gui.controller import start_server, stop_server, is_server_running
+from gui.config_manager import get_paper_count, set_paper_count
 
 APP_VERSION = "v1.0"
 IS_WINDOWS = os.name == "nt"
@@ -426,6 +425,7 @@ download_menu.add_command(label="前往 BungeeCord 官網", command=lambda: webb
 menubar.add_cascade(label="下載", menu=download_menu)
 
 config_menu = tk.Menu(menubar, tearoff=0)
+config_menu.add_command(label="重新載入Paper版本", command=load_paper_versions)
 config_menu.add_command(label="修改 Paper 數量", command=change_paper_count)
 config_menu.add_command(label="一鍵修復缺失項目", command=auto_repair_missing)
 menubar.add_cascade(label="設定", menu=config_menu)
